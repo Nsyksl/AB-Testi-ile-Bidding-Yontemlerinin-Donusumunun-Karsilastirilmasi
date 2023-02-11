@@ -1,0 +1,98 @@
+# İş Problemi
+
+Facebook kısa süre önce mevcut "maximum bidding" adı verilen teklif verme türüne alternatif olarak yeni bir teklif türü olan "average bidding"’i tanıttı.
+Müşterilerimizden biri olan bombabomba.com, bu yeni özelliği test etmeye karar verdi ve average bidding'in maximum bidding'den daha fazla dönüşüm getirip getirmediğini anlamak için bir A/B testi yapmak istiyor. 
+A/B testi 1 aydır devam ediyor ve bombabomba.com şimdi sizden bu A/B testinin sonuçlarını analiz etmenizi bekliyor. Bombabomba.com için nihai başarı ölçütü Purchase'dır.
+Bu nedenle, istatistiksel testler için Purchase metriğine odaklanılmalıdır.
+
+# Veri Seti Hikayesi
+
+Bir firmanın web site bilgilerini içeren bu veri setinde kullanıcıların gördükleri ve tıkladıkları reklam sayıları gibi bilgilerin yanı sıra buradan gelen kazanç bilgileri yer almaktadır.
+Kontrol ve Test grubu olmak üzere iki ayrı veri seti vardır.
+Bu veri setleri ab_testing.xlsx excel’inin ayrı sayfalarında yer almaktadır. Kontrol grubuna Maximum Bidding, test grubuna Average Bidding uygulanmıştır.
+
+
+# İlgili Kütüphanelerin Yüklenmesi
+import pandas as pd
+from scipy.stats import ttest_1samp, shapiro, levene, ttest_ind, mannwhitneyu
+
+# İlgili Ayarların yapılması
+pd.set_option("display.max_columns", None)
+pd.set_option("display.max_rows", None)
+pd.set_option("display.width", 500)
+pd.set_option("display.expand_frame_repr", False)
+pd.set_option("display.float_format", lambda x:  "%.4f" % x)
+
+df1 = pd.read_excel("ab_testing.xlsx", sheet_name="Control Group")
+df2 = pd.read_excel("ab_testing.xlsx", sheet_name="Test Group")
+
+
+def meet_df(dataframe, head=5):
+  print("######### SHAPE ###########")
+  print(dataframe.shape)
+  print("######## Types #######")
+  print(dataframe.dtypes)
+  print("######## HEAD #########")
+  print(dataframe.head(head))
+  print("######### TAİL ########")
+  print(dataframe.tail(head))
+  print("######## Boş Değerler #####")
+  print(dataframe.isnull().sum())
+  
+  meet_df(df1)
+  meet_df(df2)
+  
+  # Birleştirme yapacağımız için ve ilgili grupların karışmaması için Group adında kolon oluşturuyoruz.
+df1["Group"] = "Control"
+df2["Group"] = "Test"
+
+df = pd.concat([df1, df2],axis=0, ignore_index=True)
+
+# Hipotezleri Kur.
+# H0 M1 = M2 Kontrol ve test grubu satın alma ortalamaları arasında anlamlı bir fark yoktur.
+# H1 M1 != M2 ... vardır.
+# p < 0.05 H0 RED
+# p > 0.05 H0 reddedilemez
+###################################### Varsayım Kontrolleri ######################################
+# 1. Adım Normallik Varsayımı
+# H0 Normal dağılım varsayımı sağlanmaktadır.
+# H1 ... sağlanmamaktadır.
+# p < 0.05 H0 Red
+# p > 0.05 H0 Reddilemez.
+
+test_stat, pvalue = shapiro(df.loc[df["Group"] == "Control", "Purchase"])
+print("test_stat = %4f, p-value = %4f" % (test_stat, pvalue))
+#  p-value = 0.589113
+
+test_stat, pvalue = shapiro(df.loc[df["Group"] == "Test", "Purchase"])
+print("test_stat = %4f, p-value = %4f" % (test_stat, pvalue))
+p-value = 0.154132
+# Normallik varsayımı sağlanıyor.
+
+
+# 2. Adım Varyans Homojenliği
+# H0 Varyans homojenliği sağlanmaktadır.
+# H1 ... sağlanmamaktadır.
+# p < 0.05 H0 Red
+# p > 0.05 H0 Reddilemez.
+test_stat, pvalue = levene(df.loc[df["Group"] == "Control", "Purchase"],
+                           df.loc[df["Group"] == "Test", "Purchase"]
+                           )
+print("test_stat = %4f, p-value = %4f" % (test_stat, pvalue))
+# p-value = 0.108286
+# p > 0.05 H0 Reddilemez. Dolayısıyla Varyans Homojenliği sağlanmaktadır.
+
+
+test_stat, pvalue = ttest_ind(df.loc[df["Group"] == "Control", "Purchase"],
+                           df.loc[df["Group"] == "Test", "Purchase"],
+                           equal_var=True
+                           )
+print("test_stat = %4f, p-value = %4f" % (test_stat, pvalue))
+# p-value = 0.349326
+# p > 0.05 H0 Reddedilemez. Dolayısıyla Kontrol ve test grubu satın alma ortalamaları arasında anlamlı bir fark yoktur.
+
+
+#### Yorum ve Analiz ####
+
+Kontrol ve test grubunun satın alma ortalamaları arasında anlamlı bir fark yoktur. Dolayısıyla daha az maliyetli olan kısım seçilebilir. 
+Bir diğer seçenek ise geleceğe dönük olarak tıklanma oranları, görüntülenme sayısı gibi parametreler dikkate alınarak uygun hareket edilebilir.
